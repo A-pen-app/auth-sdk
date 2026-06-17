@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	e "github.com/A-pen-app/errors"
@@ -175,7 +176,10 @@ func (s *authService) SendPasswordReset(ctx context.Context, email string) error
 	}
 	user, err := s.store.Get(ctx, store.ByEmail(email))
 	if err != nil {
-		return nil
+		if errors.Is(err, e.ErrorNotFound) {
+			return nil
+		}
+		return err
 	}
 	if user.HashedPassword == nil {
 		return nil
