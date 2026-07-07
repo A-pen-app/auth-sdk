@@ -41,14 +41,14 @@ func DefaultPasswordPolicy() PasswordPolicy {
 // WRONG_PARAMETER error (mapped to HTTP 400 by callers), never a 500.
 func (p PasswordPolicy) Validate(password string) error {
 	if len(password) > bcryptMaxBytes {
-		return fmt.Errorf("%w: password must be at most %d bytes", e.ErrorWrongParams, bcryptMaxBytes)
+		return badPassword(fmt.Sprintf("password must be at most %d bytes", bcryptMaxBytes))
 	}
 	n := utf8.RuneCountInString(password)
 	if n < p.MinLength {
-		return fmt.Errorf("%w: password must be at least %d characters", e.ErrorWrongParams, p.MinLength)
+		return badPassword(fmt.Sprintf("password must be at least %d characters", p.MinLength))
 	}
 	if p.MaxLength > 0 && n > p.MaxLength {
-		return fmt.Errorf("%w: password must be at most %d characters", e.ErrorWrongParams, p.MaxLength)
+		return badPassword(fmt.Sprintf("password must be at most %d characters", p.MaxLength))
 	}
 	// Character-class checks are restricted to ASCII: the policy requires an
 	// English uppercase/lowercase letter and an ASCII digit, not any Unicode
@@ -65,15 +65,23 @@ func (p PasswordPolicy) Validate(password string) error {
 		}
 	}
 	if p.RequireUpper && !hasUpper {
-		return fmt.Errorf("%w: password must contain an uppercase letter", e.ErrorWrongParams)
+		return badPassword("password must contain an uppercase letter")
 	}
 	if p.RequireLower && !hasLower {
-		return fmt.Errorf("%w: password must contain a lowercase letter", e.ErrorWrongParams)
+		return badPassword("password must contain a lowercase letter")
 	}
 	if p.RequireDigit && !hasDigit {
-		return fmt.Errorf("%w: password must contain a digit", e.ErrorWrongParams)
+		return badPassword("password must contain a digit")
 	}
 	return nil
+}
+
+// badPassword wraps ErrorWrongParams as an *AppError so the shared errors
+// package maps it to HTTP 400. A plain fmt.Errorf("%w", …) would NOT: the
+// mapping only unwraps *AppError, so a fmt.wrapError falls through to 500.
+// reason is attached as structured detail for the client.
+func badPassword(reason string) error {
+	return e.Wrap(e.ErrorWrongParams, "reason", reason)
 }
 
 func HashPassword(password string, cost int) (string, error) {

@@ -68,6 +68,13 @@ func TestPasswordPolicyValidate(t *testing.T) {
 		if !errors.Is(err, e.ErrorWrongParams) {
 			t.Errorf("Validate(%q) [%s] should return ErrorWrongParams, got %v", tc.pw, tc.name, err)
 		}
+		// Must be an *AppError, not a plain fmt.wrapError: the shared errors
+		// package only unwraps *AppError, so a fmt.Errorf("%w") would map to
+		// HTTP 500 instead of 400. This assertion guards that regression.
+		var appErr *e.AppError
+		if !errors.As(err, &appErr) {
+			t.Errorf("Validate(%q) [%s] should return *errors.AppError (maps to 400), got %T", tc.pw, tc.name, err)
+		}
 	}
 }
 
