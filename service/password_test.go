@@ -70,3 +70,20 @@ func TestPasswordPolicyValidate(t *testing.T) {
 		}
 	}
 }
+
+// TestPasswordPolicyByteLimit guards the bcrypt 72-byte hard limit: a password
+// can pass the character-count check yet exceed 72 bytes via multi-byte runes,
+// which would otherwise fail inside bcrypt as a 500. Validate must reject it 400.
+func TestPasswordPolicyByteLimit(t *testing.T) {
+	// A policy loose enough on char count that only the byte guard can catch it.
+	p := PasswordPolicy{MinLength: 8, MaxLength: 50}
+
+	tooLong := "😈😈😈😈😈😈😈😈😈😈😈😈😈😈😈😈😈😈😈" // 19 emojis = 76 bytes, 19 runes
+	err := p.Validate(tooLong)
+	if err == nil {
+		t.Fatalf("Validate(%q) should fail due to 72-byte bcrypt limit", tooLong)
+	}
+	if !errors.Is(err, e.ErrorWrongParams) {
+		t.Errorf("Validate should return ErrorWrongParams, got %v", err)
+	}
+}

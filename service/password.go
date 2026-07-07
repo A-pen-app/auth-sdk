@@ -2,12 +2,16 @@ package service
 
 import (
 	"fmt"
-	"unicode"
 	"unicode/utf8"
 
 	e "github.com/A-pen-app/errors"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// bcryptMaxBytes is bcrypt's hard input limit. Passwords longer than this make
+// bcrypt.GenerateFromPassword fail, so Validate rejects them up-front (400)
+// regardless of the policy's character-based MaxLength.
+const bcryptMaxBytes = 72
 
 // PasswordPolicy defines the rules a plaintext password must satisfy before it
 // is hashed and stored. Use DefaultPasswordPolicy for the recommended settings;
@@ -36,6 +40,9 @@ func DefaultPasswordPolicy() PasswordPolicy {
 // Validate reports whether password satisfies the policy. Every failure is a
 // WRONG_PARAMETER error (mapped to HTTP 400 by callers), never a 500.
 func (p PasswordPolicy) Validate(password string) error {
+	if len(password) > bcryptMaxBytes {
+		return fmt.Errorf("%w: password must be at most %d bytes", e.ErrorWrongParams, bcryptMaxBytes)
+	}
 	n := utf8.RuneCountInString(password)
 	if n < p.MinLength {
 		return fmt.Errorf("%w: password must be at least %d characters", e.ErrorWrongParams, p.MinLength)
@@ -43,14 +50,17 @@ func (p PasswordPolicy) Validate(password string) error {
 	if p.MaxLength > 0 && n > p.MaxLength {
 		return fmt.Errorf("%w: password must be at most %d characters", e.ErrorWrongParams, p.MaxLength)
 	}
+	// Character-class checks are restricted to ASCII: the policy requires an
+	// English uppercase/lowercase letter and an ASCII digit, not any Unicode
+	// upper/lower/number (which would let Cyrillic, fullwidth digits, etc. pass).
 	var hasUpper, hasLower, hasDigit bool
 	for _, r := range password {
 		switch {
-		case unicode.IsUpper(r):
+		case r >= 'A' && r <= 'Z':
 			hasUpper = true
-		case unicode.IsLower(r):
+		case r >= 'a' && r <= 'z':
 			hasLower = true
-		case unicode.IsDigit(r):
+		case r >= '0' && r <= '9':
 			hasDigit = true
 		}
 	}
