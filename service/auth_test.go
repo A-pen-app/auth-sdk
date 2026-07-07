@@ -218,7 +218,7 @@ func TestSignUpByEmail(t *testing.T) {
 
 	svc := NewAuth(ms, WithBcryptCost(10))
 
-	user, err := svc.SignUpByEmail(context.Background(), "a@b.com", "secret123")
+	user, err := svc.SignUpByEmail(context.Background(), "a@b.com", "Secret123")
 	if err != nil {
 		t.Fatalf("SignUpByEmail: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestSignUpByEmail(t *testing.T) {
 	if ms.created.HashedPassword == nil {
 		t.Fatal("expected hashed password to be set")
 	}
-	if err := VerifyPassword(*ms.created.HashedPassword, "secret123"); err != nil {
+	if err := VerifyPassword(*ms.created.HashedPassword, "Secret123"); err != nil {
 		t.Fatalf("password should verify: %v", err)
 	}
 	if ms.created.Platform != models.PlatformEmail {
@@ -327,13 +327,13 @@ func TestChangePassword(t *testing.T) {
 	svc := NewAuth(ms, WithBcryptCost(10))
 	ctx := context.Background()
 
-	if err := svc.ChangePassword(ctx, "a@b.com", "oldpw", "newpw"); err != nil {
+	if err := svc.ChangePassword(ctx, "a@b.com", "oldpw", "Newpw123"); err != nil {
 		t.Fatalf("ChangePassword: %v", err)
 	}
 	if ms.updatedID != "uid-1" {
 		t.Fatalf("expected updated user uid-1, got %s", ms.updatedID)
 	}
-	if err := VerifyPassword(ms.updatedPassword, "newpw"); err != nil {
+	if err := VerifyPassword(ms.updatedPassword, "Newpw123"); err != nil {
 		t.Fatalf("new password should verify: %v", err)
 	}
 }
@@ -431,13 +431,13 @@ func TestResetPassword(t *testing.T) {
 
 	code, _ := resetOTP.Generate(ctx, "a@b.com")
 
-	if err := svc.ResetPassword(ctx, "a@b.com", code, "newpw"); err != nil {
+	if err := svc.ResetPassword(ctx, "a@b.com", code, "Newpw123"); err != nil {
 		t.Fatalf("ResetPassword: %v", err)
 	}
 	if ms.updatedID != "uid-1" {
 		t.Fatalf("expected updated user uid-1, got %s", ms.updatedID)
 	}
-	if err := VerifyPassword(ms.updatedPassword, "newpw"); err != nil {
+	if err := VerifyPassword(ms.updatedPassword, "Newpw123"); err != nil {
 		t.Fatalf("new password should verify: %v", err)
 	}
 }

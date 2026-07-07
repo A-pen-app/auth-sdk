@@ -33,20 +33,28 @@ func WithBcryptCost(cost int) AuthOption {
 	return func(s *authService) { s.bcryptCost = cost }
 }
 
+// WithPasswordPolicy overrides the rules new passwords must satisfy at signup,
+// reset, and change. Defaults to DefaultPasswordPolicy.
+func WithPasswordPolicy(p PasswordPolicy) AuthOption {
+	return func(s *authService) { s.passwordPolicy = p }
+}
+
 type authService struct {
-	providers   map[models.Platform]models.Provider
-	store       store.UserStore
-	otp         *OTP
-	resetOTP    *OTP
-	emailSender store.EmailSender
-	bcryptCost  int
+	providers      map[models.Platform]models.Provider
+	store          store.UserStore
+	otp            *OTP
+	resetOTP       *OTP
+	emailSender    store.EmailSender
+	bcryptCost     int
+	passwordPolicy PasswordPolicy
 }
 
 func NewAuth(us store.UserStore, opts ...AuthOption) Auth {
 	s := &authService{
-		providers:  make(map[models.Platform]models.Provider),
-		store:      us,
-		bcryptCost: 10,
+		providers:      make(map[models.Platform]models.Provider),
+		store:          us,
+		bcryptCost:     10,
+		passwordPolicy: DefaultPasswordPolicy(),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -117,6 +125,9 @@ func (s *authService) SignUpByOAuth(ctx context.Context, platform models.Platfor
 }
 
 func (s *authService) SignUpByEmail(ctx context.Context, email, password string) (*models.User, error) {
+	if err := s.passwordPolicy.Validate(password); err != nil {
+		return nil, err
+	}
 	hashed, err := HashPassword(password, s.bcryptCost)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
@@ -160,6 +171,9 @@ func (s *authService) ChangePassword(ctx context.Context, email, oldPassword, ne
 	if err := VerifyPassword(*user.HashedPassword, oldPassword); err != nil {
 		return e.ErrorUnauthorized
 	}
+	if err := s.passwordPolicy.Validate(newPassword); err != nil {
+		return err
+	}
 	hashed, err := HashPassword(newPassword, s.bcryptCost)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
@@ -196,6 +210,9 @@ func (s *authService) ResetPassword(ctx context.Context, email, code, newPasswor
 		return fmt.Errorf("auth: reset otp not configured")
 	}
 	if err := s.resetOTP.Verify(ctx, email, code); err != nil {
+		return err
+	}
+	if err := s.passwordPolicy.Validate(newPassword); err != nil {
 		return err
 	}
 	hashed, err := HashPassword(newPassword, s.bcryptCost)
