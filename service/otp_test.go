@@ -89,6 +89,40 @@ func TestOTPVerifyDeletesCode(t *testing.T) {
 	}
 }
 
+func TestOTPCheckDoesNotConsume(t *testing.T) {
+	otp := NewOTP(newMockCache())
+	ctx := context.Background()
+
+	code, _ := otp.Generate(ctx, "user@example.com")
+
+	// Check succeeds and leaves the code in place — repeatable.
+	if err := otp.Check(ctx, "user@example.com", code); err != nil {
+		t.Fatalf("Check should succeed: %v", err)
+	}
+	if err := otp.Check(ctx, "user@example.com", code); err != nil {
+		t.Fatalf("Check should still succeed (non-consuming): %v", err)
+	}
+
+	// Verify then consumes it, after which Check fails.
+	if err := otp.Verify(ctx, "user@example.com", code); err != nil {
+		t.Fatalf("Verify should succeed: %v", err)
+	}
+	if err := otp.Check(ctx, "user@example.com", code); err == nil {
+		t.Fatal("Check should fail after the code is consumed")
+	}
+}
+
+func TestOTPCheckWrongCode(t *testing.T) {
+	otp := NewOTP(newMockCache())
+	ctx := context.Background()
+
+	_, _ = otp.Generate(ctx, "user@example.com")
+
+	if err := otp.Check(ctx, "user@example.com", "000000"); err == nil {
+		t.Fatal("Check should fail on wrong code")
+	}
+}
+
 func TestOTPCustomOptions(t *testing.T) {
 	otp := NewOTP(newMockCache(),
 		WithKeyPrefix("custom:"),

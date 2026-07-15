@@ -21,5 +21,6 @@ type Auth interface {
 
 	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
 	SendPasswordReset(ctx context.Context, email string) error
+	VerifyPasswordResetCode(ctx context.Context, email, code string) error
 	ResetPassword(ctx context.Context, email, code, newPassword string) error
 }
