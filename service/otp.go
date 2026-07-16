@@ -60,15 +60,26 @@ func (o *OTP) Generate(ctx context.Context, key string) (string, error) {
 	return code, nil
 }
 
-func (o *OTP) Verify(ctx context.Context, key, code string) error {
-	cacheKey := o.keyPrefix + key
+// Check verifies the code WITHOUT consuming it: a successful check leaves the
+// code in place so it can still be spent later by Verify. Use it for a
+// pre-validation step (e.g. confirm a reset code before collecting the new
+// password).
+func (o *OTP) Check(ctx context.Context, key, code string) error {
 	var stored string
-	if err := o.cache.Get(ctx, cacheKey, &stored); err != nil {
+	if err := o.cache.Get(ctx, o.keyPrefix+key, &stored); err != nil {
 		return fmt.Errorf("otp not found or expired: %w", err)
 	}
 	if code != stored {
 		return fmt.Errorf("otp mismatch")
 	}
-	o.cache.Delete(ctx, cacheKey)
+	return nil
+}
+
+// Verify checks the code and, on success, consumes it (single use).
+func (o *OTP) Verify(ctx context.Context, key, code string) error {
+	if err := o.Check(ctx, key, code); err != nil {
+		return err
+	}
+	o.cache.Delete(ctx, o.keyPrefix+key)
 	return nil
 }

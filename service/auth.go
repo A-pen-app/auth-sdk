@@ -205,6 +205,16 @@ func (s *authService) SendPasswordReset(ctx context.Context, email string) error
 	return s.emailSender.SendPasswordReset(ctx, email, code)
 }
 
+// VerifyPasswordResetCode checks a reset code WITHOUT consuming it, so a caller
+// can pre-validate the code before collecting the new password. The code is
+// still spent by ResetPassword.
+func (s *authService) VerifyPasswordResetCode(ctx context.Context, email, code string) error {
+	if s.resetOTP == nil {
+		return fmt.Errorf("auth: reset otp not configured")
+	}
+	return s.resetOTP.Check(ctx, email, code)
+}
+
 func (s *authService) ResetPassword(ctx context.Context, email, code, newPassword string) error {
 	if s.resetOTP == nil {
 		return fmt.Errorf("auth: reset otp not configured")

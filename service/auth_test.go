@@ -454,3 +454,28 @@ func TestResetPasswordWrongCode(t *testing.T) {
 		t.Fatal("expected error on wrong reset code")
 	}
 }
+
+func TestVerifyPasswordResetCode(t *testing.T) {
+	hashed, _ := HashPassword("oldpw", 10)
+	cache := newMockCache()
+	resetOTP := NewOTP(cache, WithKeyPrefix("reset_code:"))
+	ms := newMockStore()
+	ms.addByEmail("a@b.com", &models.User{ID: "uid-1", HashedPassword: &hashed})
+
+	svc := NewAuth(ms, WithResetOTP(resetOTP), WithBcryptCost(10))
+	ctx := context.Background()
+
+	code, _ := resetOTP.Generate(ctx, "a@b.com")
+
+	// Wrong code fails.
+	if err := svc.VerifyPasswordResetCode(ctx, "a@b.com", "000000"); err == nil {
+		t.Fatal("expected error on wrong reset code")
+	}
+	// Correct code passes without consuming — ResetPassword still works after.
+	if err := svc.VerifyPasswordResetCode(ctx, "a@b.com", code); err != nil {
+		t.Fatalf("VerifyPasswordResetCode: %v", err)
+	}
+	if err := svc.ResetPassword(ctx, "a@b.com", code, "Newpw123"); err != nil {
+		t.Fatalf("ResetPassword should still work after a non-consuming verify: %v", err)
+	}
+}
