@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -17,12 +18,16 @@ func newMockCache() *mockCache {
 	return &mockCache{data: make(map[string]any)}
 }
 
+// errCacheMiss lets the tests assert the cache's own error still unwraps out of
+// what Check returns.
+var errCacheMiss = errors.New("key not found")
+
 func (m *mockCache) Get(_ context.Context, key string, dest any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	v, ok := m.data[key]
 	if !ok {
-		return fmt.Errorf("key not found: %s", key)
+		return fmt.Errorf("%w: %s", errCacheMiss, key)
 	}
 	ptr, ok := dest.(*string)
 	if !ok {
@@ -121,6 +126,59 @@ func TestOTPCheckWrongCode(t *testing.T) {
 	if err := otp.Check(ctx, "user@example.com", "000000"); err == nil {
 		t.Fatal("Check should fail on wrong code")
 	}
+}
+
+func TestOTPCheckSentinels(t *testing.T) {
+	otp := NewOTP(newMockCache())
+	ctx := context.Background()
+
+	t.Run("wrong code is ErrOTPMismatch", func(t *testing.T) {
+		if _, err := otp.Generate(ctx, "a@b.com"); err != nil {
+			t.Fatalf("Generate: %v", err)
+		}
+		err := otp.Check(ctx, "a@b.com", "000000")
+		if !errors.Is(err, ErrOTPMismatch) {
+			t.Errorf("want ErrOTPMismatch, got %v", err)
+		}
+		if errors.Is(err, ErrOTPNotFound) {
+			t.Error("a mismatch must not look like a missing code")
+		}
+	})
+
+	t.Run("no code stored is ErrOTPNotFound, and keeps the cache error", func(t *testing.T) {
+		err := otp.Check(ctx, "never-sent@b.com", "123456")
+		if !errors.Is(err, ErrOTPNotFound) {
+			t.Errorf("want ErrOTPNotFound, got %v", err)
+		}
+		// The cache's own error stays reachable — callers that already branch on
+		// it must not break.
+		if !errors.Is(err, errCacheMiss) {
+			t.Errorf("underlying cache error should still unwrap, got %v", err)
+		}
+	})
+
+	t.Run("Verify surfaces the same sentinels", func(t *testing.T) {
+		if _, err := otp.Generate(ctx, "c@d.com"); err != nil {
+			t.Fatalf("Generate: %v", err)
+		}
+		if err := otp.Verify(ctx, "c@d.com", "000000"); !errors.Is(err, ErrOTPMismatch) {
+			t.Errorf("want ErrOTPMismatch, got %v", err)
+		}
+		if err := otp.Verify(ctx, "never@d.com", "123456"); !errors.Is(err, ErrOTPNotFound) {
+			t.Errorf("want ErrOTPNotFound, got %v", err)
+		}
+	})
+
+	// The messages are part of the contract today: consumers still match on the
+	// text (medgo's isBadResetCode), so changing them would silently break them.
+	t.Run("messages stay stable for text matchers", func(t *testing.T) {
+		if got := ErrOTPMismatch.Error(); got != "otp mismatch" {
+			t.Errorf("ErrOTPMismatch = %q, want %q", got, "otp mismatch")
+		}
+		if got := ErrOTPNotFound.Error(); got != "otp not found or expired" {
+			t.Errorf("ErrOTPNotFound = %q, want %q", got, "otp not found or expired")
+		}
+	})
 }
 
 func TestOTPCustomOptions(t *testing.T) {

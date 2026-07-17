@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -64,13 +65,23 @@ func (o *OTP) Generate(ctx context.Context, key string) (string, error) {
 // code in place so it can still be spent later by Verify. Use it for a
 // pre-validation step (e.g. confirm a reset code before collecting the new
 // password).
+// Sentinel errors from Check/Verify, so callers can branch on errors.Is
+// instead of matching the message text.
+var (
+	// ErrOTPNotFound means no code is stored for the key: never sent, or expired.
+	ErrOTPNotFound = errors.New("otp not found or expired")
+	// ErrOTPMismatch means a code is stored but the supplied one differs.
+	ErrOTPMismatch = errors.New("otp mismatch")
+)
+
 func (o *OTP) Check(ctx context.Context, key, code string) error {
 	var stored string
 	if err := o.cache.Get(ctx, o.keyPrefix+key, &stored); err != nil {
-		return fmt.Errorf("otp not found or expired: %w", err)
+		// Wrap both so errors.Is finds the sentinel and the cache's own error.
+		return fmt.Errorf("%w: %w", ErrOTPNotFound, err)
 	}
 	if code != stored {
-		return fmt.Errorf("otp mismatch")
+		return ErrOTPMismatch
 	}
 	return nil
 }
