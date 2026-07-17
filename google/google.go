@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/A-pen-app/auth-sdk/models"
+	"github.com/golang-jwt/jwt/v4"
 	"google.golang.org/api/oauth2/v1"
 	"google.golang.org/api/option"
 )
@@ -51,10 +52,28 @@ func (g *Google) Verify(ctx context.Context, token string) (*models.UserInfo, er
 		return nil, fmt.Errorf("google: unknown client ID %s", info.Audience)
 	}
 
+	name, photoURL := profileClaims(token)
 	return &models.UserInfo{
-		ID:    info.UserId,
-		Email: info.Email,
+		ID:       info.UserId,
+		Email:    info.Email,
+		Name:     name,
+		PhotoURL: photoURL,
 	}, nil
+}
+
+// profileClaims reads the display fields out of an id_token. tokeninfo only
+// returns the verification fields (user_id/email/audience), so the profile has
+// to come from the token's own claims. Parsing is unverified on purpose: the
+// caller verified the same token above, and these fields are display-only — a
+// malformed payload just yields empty strings.
+func profileClaims(token string) (name, photoURL string) {
+	claims := jwt.MapClaims{}
+	if _, _, err := new(jwt.Parser).ParseUnverified(token, claims); err != nil {
+		return "", ""
+	}
+	name, _ = claims["name"].(string)
+	photoURL, _ = claims["picture"].(string)
+	return name, photoURL
 }
 
 func (g *Google) isAllowedClientID(aud string) bool {
